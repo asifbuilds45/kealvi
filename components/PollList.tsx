@@ -53,20 +53,23 @@ export default function PollList() {
   }
 
   async function vote(pollId: string, optionId: string) {
-    if (voted[pollId]) return;
+  if (voted[pollId]) return;
 
-    const { error } = await supabase
-      .from("poll_votes")
-      .insert({ poll_id: pollId, option_id: optionId });
+  const { error } = await supabase
+    .from("poll_votes")
+    .insert({ poll_id: pollId, option_id: optionId });
 
-    if (!error) {
-      setVoted((prev) => ({ ...prev, [pollId]: optionId }));
-      setVotes((prev) => ({
-        ...prev,
-        [optionId]: (prev[optionId] || 0) + 1,
-      }));
-    }
+  if (error) {
+    alert("Vote error: " + error.message);
+    return;
   }
+
+  setVoted((prev) => ({ ...prev, [pollId]: optionId }));
+  setVotes((prev) => ({
+    ...prev,
+    [optionId]: (prev[optionId] || 0) + 1,
+  }));
+}
 
   useEffect(() => {
     fetchPolls();
