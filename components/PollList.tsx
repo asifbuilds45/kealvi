@@ -59,10 +59,7 @@ export default function PollList() {
     .from("poll_votes")
     .insert({ poll_id: pollId, option_id: optionId });
 
-  if (error) {
-    alert("Vote error: " + error.message);
-    return;
-  }
+  if (error) return;
 
   setVoted((prev) => ({ ...prev, [pollId]: optionId }));
   setVotes((prev) => ({
