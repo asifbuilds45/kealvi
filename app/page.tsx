@@ -1,6 +1,7 @@
 import QuestionsList from "./questions-list";
 import { getQuestionsPage } from "@/lib/questions";
 import PollCreate from "@/components/PollCreate";
+import PollList from "../components/PollList";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,7 @@ export default async function Page() {
       <h1 className="mb-4 text-2xl font-medium">Live Q&A</h1>
 
       <PollCreate />
+      <PollList />
 
       <QuestionsList
         initialQuestions={questions}
