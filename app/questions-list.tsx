@@ -25,12 +25,12 @@ export default function QuestionsList({
   initialHasMore: boolean;
 }) {
   const [questions, setQuestions] = useState(initialQuestions);
-  const [draft, setDraft] = useState(() => {
-  if (typeof window !== "undefined") {
-    return localStorage.getItem("question-draft") || "";
-  }
-  return "";
-});
+  const [draft, setDraft] = useState("");
+
+useEffect(() => {
+  const saved = localStorage.getItem("question-draft");
+  if (saved) setDraft(saved);
+}, []);
   const [query, setQuery] = useState("");
   const [hasMore, setHasMore] = useState(initialHasMore);
   const [loading, setLoading] = useState(false);
