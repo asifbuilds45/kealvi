@@ -25,7 +25,12 @@ export default function QuestionsList({
   initialHasMore: boolean;
 }) {
   const [questions, setQuestions] = useState(initialQuestions);
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useState(() => {
+  if (typeof window !== "undefined") {
+    return localStorage.getItem("question-draft") || "";
+  }
+  return "";
+});
   const [query, setQuery] = useState("");
   const [hasMore, setHasMore] = useState(initialHasMore);
   const [loading, setLoading] = useState(false);
@@ -73,6 +78,7 @@ export default function QuestionsList({
     const created = await res.json();
     setQuestions((qs) => [{ ...created, votes: 0 }, ...qs]);
     setDraft("");
+    localStorage.removeItem("question-draft");
   }
 
   async function upvote(id: string) {
@@ -142,7 +148,10 @@ export default function QuestionsList({
       <div className="flex gap-2">
         <input
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(e) => {
+  setDraft(e.target.value);
+  localStorage.setItem("question-draft", e.target.value);
+}}
           placeholder="Ask a question…"
           className="flex-1 rounded-md border px-3 py-2"
         />
