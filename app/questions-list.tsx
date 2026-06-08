@@ -8,6 +8,8 @@ const supabase = createClient(
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVpeWVsYWtxZ2xvcHF3ZGFva2l6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA0MDA4NjcsImV4cCI6MjA5NTk3Njg2N30.m-gZJgtIQ4VH1uJrNn6Y8QsXwxpgZmXom6KlIrOU8po"
 );
 
+const REPORT_REASONS = ["Spam", "Inappropriate", "Misinformation", "Other"];
+
 type Question = {
   id: string;
   body: string;
@@ -29,6 +31,8 @@ export default function QuestionsList({
   const [loading, setLoading] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [bookmarks, setBookmarks] = useState<Set<string>>(new Set());
+  const [reported, setReported] = useState<Set<string>>(new Set());
+  const [reportingId, setReportingId] = useState<string | null>(null);
 
   useEffect(() => setHydrated(true), []);
 
@@ -90,7 +94,6 @@ export default function QuestionsList({
   async function toggleBookmark(questionId: string) {
     const userId = getVoterId();
     const isBookmarked = bookmarks.has(questionId);
-
     if (isBookmarked) {
       await supabase
         .from("bookmarks")
@@ -108,6 +111,17 @@ export default function QuestionsList({
         .insert({ question_id: questionId, user_id: userId });
       setBookmarks((prev) => new Set(prev).add(questionId));
     }
+  }
+
+  async function submitReport(questionId: string, reason: string) {
+    const userId = getVoterId();
+    const { error } = await supabase
+      .from("reports")
+      .insert({ question_id: questionId, user_id: userId, reason });
+    if (!error) {
+      setReported((prev) => new Set(prev).add(questionId));
+    }
+    setReportingId(null);
   }
 
   async function loadMore() {
@@ -146,24 +160,49 @@ export default function QuestionsList({
 
       <ul className="space-y-3">
         {questions.map((q) => (
-          <li
-            key={q.id}
-            className="flex items-center gap-3 rounded-lg border p-3"
-          >
-            <button
-              onClick={() => upvote(q.id)}
-              className="rounded-md border px-3 py-1 font-mono"
-            >
-              ▲ {q.votes}
-            </button>
-            <span className="flex-1">{q.body}</span>
-            <button
-              onClick={() => toggleBookmark(q.id)}
-              className="text-lg"
-              title={bookmarks.has(q.id) ? "Remove bookmark" : "Bookmark"}
-            >
-              {bookmarks.has(q.id) ? "🔖" : "🏷️"}
-            </button>
+          <li key={q.id} className="rounded-lg border p-3 space-y-2">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => upvote(q.id)}
+                className="rounded-md border px-3 py-1 font-mono"
+              >
+                ▲ {q.votes}
+              </button>
+              <span className="flex-1">{q.body}</span>
+              <button
+                onClick={() => toggleBookmark(q.id)}
+                className="text-lg"
+                title={bookmarks.has(q.id) ? "Remove bookmark" : "Bookmark"}
+              >
+                {bookmarks.has(q.id) ? "🔖" : "🏷️"}
+              </button>
+              {reported.has(q.id) ? (
+                <span className="text-xs text-gray-400">Reported ✓</span>
+              ) : (
+                <button
+                  onClick={() =>
+                    setReportingId(reportingId === q.id ? null : q.id)
+                  }
+                  className="text-xs text-red-400 hover:text-red-600"
+                >
+                  Report
+                </button>
+              )}
+            </div>
+
+            {reportingId === q.id && (
+              <div className="flex flex-wrap gap-2 pt-1">
+                {REPORT_REASONS.map((reason) => (
+                  <button
+                    key={reason}
+                    onClick={() => submitReport(q.id, reason)}
+                    className="rounded-md border px-3 py-1 text-sm hover:bg-red-50"
+                  >
+                    {reason}
+                  </button>
+                ))}
+              </div>
+            )}
           </li>
         ))}
       </ul>
