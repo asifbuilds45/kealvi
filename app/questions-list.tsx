@@ -219,6 +219,21 @@ const data = JSON.parse(text);
               >
                 {bookmarks.has(q.id) ? "🔖" : "🏷️"}
               </button>
+              <button
+  onClick={() => {
+    const url = `${window.location.origin}?q=${q.id}`;
+    if (navigator.share) {
+      navigator.share({ title: q.body, url });
+    } else {
+      navigator.clipboard.writeText(url);
+      alert("Link copied!");
+    }
+  }}
+  className="text-xs text-white/30 hover:text-white/60 transition"
+  title="Share"
+>
+  🔗
+</button>
               {reported.has(q.id) ? (
                 <span className="text-xs text-gray-400">Reported ✓</span>
               ) : (
