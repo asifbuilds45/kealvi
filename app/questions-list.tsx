@@ -145,8 +145,9 @@ export default function QuestionsList({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ question: value }),
         });
-        const data = await res.json();
-        console.log("Category response:", data);
+        const text = await res.text();
+console.log("Category response:", text);
+const data = JSON.parse(text);
         setSuggestedCategory(data.category);
       } catch {
         setSuggestedCategory(null);
