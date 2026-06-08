@@ -1,6 +1,12 @@
 "use client";
 import { useState, useEffect } from "react";
 import { getVoterId } from "@/lib/voter";
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(
+  "https://eiyelakqglopqwdaokiz.supabase.co",
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVpeWVsYWtxZ2xvcHF3ZGFva2l6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA0MDA4NjcsImV4cCI6MjA5NTk3Njg2N30.m-gZJgtIQ4VH1uJrNn6Y8QsXwxpgZmXom6KlIrOU8po"
+);
 
 type Question = {
   id: string;
@@ -21,12 +27,25 @@ export default function QuestionsList({
   const [query, setQuery] = useState("");
   const [hasMore, setHasMore] = useState(initialHasMore);
   const [loading, setLoading] = useState(false);
-
   const [hydrated, setHydrated] = useState(false);
+  const [bookmarks, setBookmarks] = useState<Set<string>>(new Set());
+
   useEffect(() => setHydrated(true), []);
 
-  // Debounced search: wait 300ms after typing stops; each keystroke cancels
-  // the previous timer, so "deploying" fires one request, not nine.
+  useEffect(() => {
+    async function fetchBookmarks() {
+      const userId = getVoterId();
+      const { data } = await supabase
+        .from("bookmarks")
+        .select("question_id")
+        .eq("user_id", userId);
+      if (data) {
+        setBookmarks(new Set(data.map((b: any) => b.question_id)));
+      }
+    }
+    fetchBookmarks();
+  }, []);
+
   useEffect(() => {
     const id = setTimeout(async () => {
       const url = query
@@ -37,41 +56,57 @@ export default function QuestionsList({
       setQuestions(data.questions);
       setHasMore(data.hasMore);
     }, 300);
-
-    return () => clearTimeout(id); // cancel the pending timer on each keystroke
+    return () => clearTimeout(id);
   }, [query]);
 
   async function submit() {
     if (!draft.trim()) return;
-
     const res = await fetch("/api/questions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ body: draft }),
     });
     const created = await res.json();
-
     setQuestions((qs) => [{ ...created, votes: 0 }, ...qs]);
     setDraft("");
   }
 
   async function upvote(id: string) {
-    // optimistic: assume success, update the UI now
     setQuestions((qs) =>
       qs.map((q) => (q.id === id ? { ...q, votes: q.votes + 1 } : q))
     );
-
     const res = await fetch(`/api/questions/${id}/vote`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ voterId: getVoterId() }),
     });
-
-    // server said no (already voted) — roll back
     if (!res.ok) {
       setQuestions((qs) =>
         qs.map((q) => (q.id === id ? { ...q, votes: q.votes - 1 } : q))
       );
+    }
+  }
+
+  async function toggleBookmark(questionId: string) {
+    const userId = getVoterId();
+    const isBookmarked = bookmarks.has(questionId);
+
+    if (isBookmarked) {
+      await supabase
+        .from("bookmarks")
+        .delete()
+        .eq("question_id", questionId)
+        .eq("user_id", userId);
+      setBookmarks((prev) => {
+        const next = new Set(prev);
+        next.delete(questionId);
+        return next;
+      });
+    } else {
+      await supabase
+        .from("bookmarks")
+        .insert({ question_id: questionId, user_id: userId });
+      setBookmarks((prev) => new Set(prev).add(questionId));
     }
   }
 
@@ -121,7 +156,14 @@ export default function QuestionsList({
             >
               ▲ {q.votes}
             </button>
-            <span>{q.body}</span>
+            <span className="flex-1">{q.body}</span>
+            <button
+              onClick={() => toggleBookmark(q.id)}
+              className="text-lg"
+              title={bookmarks.has(q.id) ? "Remove bookmark" : "Bookmark"}
+            >
+              {bookmarks.has(q.id) ? "🔖" : "🏷️"}
+            </button>
           </li>
         ))}
       </ul>
