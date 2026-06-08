@@ -20,6 +20,7 @@ type Question = {
 };
 
 type ReactionCounts = Record<string, Record<string, number>>;
+type QualityResult = { score: number; label: string; tip: string };
 
 export default function QuestionsList({
   initialQuestions,
@@ -42,6 +43,8 @@ export default function QuestionsList({
   const [categorizing, setCategorizing] = useState(false);
   const [reactions, setReactions] = useState<ReactionCounts>({});
   const [userReactions, setUserReactions] = useState<Record<string, Set<string>>>({});
+  const [qualityCheck, setQualityCheck] = useState<QualityResult | null>(null);
+  const [checking, setChecking] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem("question-draft");
@@ -113,6 +116,7 @@ export default function QuestionsList({
     setDraft("");
     setSuggestedCategory(null);
     setAnonymous(false);
+    setQualityCheck(null);
     localStorage.removeItem("question-draft");
   }
 
@@ -157,7 +161,6 @@ export default function QuestionsList({
   async function toggleReaction(questionId: string, emoji: string) {
     const userId = getVoterId();
     const hasReacted = userReactions[questionId]?.has(emoji);
-
     if (hasReacted) {
       await supabase
         .from("reactions")
@@ -165,7 +168,6 @@ export default function QuestionsList({
         .eq("question_id", questionId)
         .eq("user_id", userId)
         .eq("emoji", emoji);
-
       setReactions((prev) => ({
         ...prev,
         [questionId]: {
@@ -182,7 +184,6 @@ export default function QuestionsList({
       await supabase
         .from("reactions")
         .insert({ question_id: questionId, user_id: userId, emoji });
-
       setReactions((prev) => ({
         ...prev,
         [questionId]: {
@@ -212,6 +213,7 @@ export default function QuestionsList({
   async function handleDraftChange(value: string) {
     setDraft(value);
     localStorage.setItem("question-draft", value);
+    setQualityCheck(null);
     if (value.length > 20) {
       setCategorizing(true);
       try {
@@ -230,6 +232,23 @@ export default function QuestionsList({
     } else {
       setSuggestedCategory(null);
     }
+  }
+
+  async function checkQuality() {
+    if (!draft.trim() || draft.length < 10) return;
+    setChecking(true);
+    try {
+      const res = await fetch("/api/check-quality", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: draft }),
+      });
+      const data = await res.json();
+      setQualityCheck(data);
+    } catch {
+      setQualityCheck(null);
+    }
+    setChecking(false);
   }
 
   async function loadMore() {
@@ -256,12 +275,20 @@ export default function QuestionsList({
             className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder-white/30 outline-none transition focus:border-indigo-400/60 focus:ring-2 focus:ring-indigo-500/20"
           />
           <button
+            onClick={checkQuality}
+            disabled={checking || draft.length < 10}
+            className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/60 transition hover:bg-white/10 disabled:opacity-30"
+          >
+            {checking ? "..." : "Check"}
+          </button>
+          <button
             onClick={submit}
             className="rounded-xl bg-indigo-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500"
           >
             Ask
           </button>
         </div>
+
         <label className="flex cursor-pointer items-center gap-2 text-sm text-white/40">
           <input
             type="checkbox"
@@ -271,6 +298,19 @@ export default function QuestionsList({
           />
           Post anonymously
         </label>
+
+        {qualityCheck && (
+          <div className={`rounded-xl border p-3 text-sm ${
+            qualityCheck.score >= 7
+              ? "border-green-500/30 bg-green-500/10 text-green-300"
+              : qualityCheck.score >= 4
+              ? "border-yellow-500/30 bg-yellow-500/10 text-yellow-300"
+              : "border-red-500/30 bg-red-500/10 text-red-300"
+          }`}>
+            <span className="font-semibold">{qualityCheck.score}/10 · {qualityCheck.label}</span>
+            <span className="ml-2 opacity-80">{qualityCheck.tip}</span>
+          </div>
+        )}
       </div>
 
       {categorizing && (
@@ -336,7 +376,6 @@ export default function QuestionsList({
               )}
             </div>
 
-            {/* Reactions */}
             <div className="flex items-center gap-2">
               {REACTION_EMOJIS.map((emoji) => {
                 const count = reactions[q.id]?.[emoji] || 0;
@@ -345,10 +384,10 @@ export default function QuestionsList({
                   <button
                     key={emoji}
                     onClick={() => toggleReaction(q.id, emoji)}
-                    className={`flex items-center gap-1 rounded-lg px-2 py-1 text-sm transition ${
+                    className={`flex items-center gap-1 rounded-lg border px-2 py-1 text-sm transition ${
                       hasReacted
-                        ? "bg-indigo-500/20 text-white border border-indigo-400/40"
-                        : "bg-white/5 text-white/50 border border-white/10 hover:bg-white/10 hover:text-white"
+                        ? "border-indigo-400/40 bg-indigo-500/20 text-white"
+                        : "border-white/10 bg-white/5 text-white/50 hover:bg-white/10 hover:text-white"
                     }`}
                   >
                     {emoji}
