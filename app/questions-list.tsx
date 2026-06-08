@@ -26,11 +26,6 @@ export default function QuestionsList({
 }) {
   const [questions, setQuestions] = useState(initialQuestions);
   const [draft, setDraft] = useState("");
-
-useEffect(() => {
-  const saved = localStorage.getItem("question-draft");
-  if (saved) setDraft(saved);
-}, []);
   const [query, setQuery] = useState("");
   const [hasMore, setHasMore] = useState(initialHasMore);
   const [loading, setLoading] = useState(false);
@@ -38,6 +33,13 @@ useEffect(() => {
   const [bookmarks, setBookmarks] = useState<Set<string>>(new Set());
   const [reported, setReported] = useState<Set<string>>(new Set());
   const [reportingId, setReportingId] = useState<string | null>(null);
+  const [suggestedCategory, setSuggestedCategory] = useState<string | null>(null);
+  const [categorizing, setCategorizing] = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("question-draft");
+    if (saved) setDraft(saved);
+  }, []);
 
   useEffect(() => setHydrated(true), []);
 
@@ -78,6 +80,7 @@ useEffect(() => {
     const created = await res.json();
     setQuestions((qs) => [{ ...created, votes: 0 }, ...qs]);
     setDraft("");
+    setSuggestedCategory(null);
     localStorage.removeItem("question-draft");
   }
 
@@ -130,6 +133,29 @@ useEffect(() => {
     setReportingId(null);
   }
 
+  async function handleDraftChange(value: string) {
+    setDraft(value);
+    localStorage.setItem("question-draft", value);
+
+    if (value.length > 20) {
+      setCategorizing(true);
+      try {
+        const res = await fetch("/api/suggest-category", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question: value }),
+        });
+        const data = await res.json();
+        setSuggestedCategory(data.category);
+      } catch {
+        setSuggestedCategory(null);
+      }
+      setCategorizing(false);
+    } else {
+      setSuggestedCategory(null);
+    }
+  }
+
   async function loadMore() {
     setLoading(true);
     const res = await fetch(`/api/questions?offset=${questions.length}`);
@@ -148,10 +174,7 @@ useEffect(() => {
       <div className="flex gap-2">
         <input
           value={draft}
-          onChange={(e) => {
-  setDraft(e.target.value);
-  localStorage.setItem("question-draft", e.target.value);
-}}
+          onChange={(e) => handleDraftChange(e.target.value)}
           placeholder="Ask a question…"
           className="flex-1 rounded-md border px-3 py-2"
         />
@@ -159,6 +182,15 @@ useEffect(() => {
           Ask
         </button>
       </div>
+
+      {categorizing && (
+        <p className="text-xs text-gray-400">Suggesting category...</p>
+      )}
+      {suggestedCategory && !categorizing && (
+        <p className="text-xs text-blue-500">
+          Suggested category: <strong>{suggestedCategory}</strong>
+        </p>
+      )}
 
       <input
         value={query}
