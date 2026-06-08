@@ -15,6 +15,7 @@ type Question = {
   body: string;
   author: string | null;
   votes: number;
+  anonymous?: boolean;
 };
 
 export default function QuestionsList({
@@ -26,6 +27,7 @@ export default function QuestionsList({
 }) {
   const [questions, setQuestions] = useState(initialQuestions);
   const [draft, setDraft] = useState("");
+  const [anonymous, setAnonymous] = useState(false);
   const [query, setQuery] = useState("");
   const [hasMore, setHasMore] = useState(initialHasMore);
   const [loading, setLoading] = useState(false);
@@ -75,12 +77,13 @@ export default function QuestionsList({
     const res = await fetch("/api/questions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ body: draft }),
+      body: JSON.stringify({ body: draft, anonymous }),
     });
     const created = await res.json();
     setQuestions((qs) => [{ ...created, votes: 0 }, ...qs]);
     setDraft("");
     setSuggestedCategory(null);
+    setAnonymous(false);
     localStorage.removeItem("question-draft");
   }
 
@@ -146,8 +149,7 @@ export default function QuestionsList({
           body: JSON.stringify({ question: value }),
         });
         const text = await res.text();
-console.log("Category response:", text);
-const data = JSON.parse(text);
+        const data = JSON.parse(text);
         setSuggestedCategory(data.category);
       } catch {
         setSuggestedCategory(null);
@@ -169,27 +171,42 @@ const data = JSON.parse(text);
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-gray-500">
+      <p className="text-sm text-white/40">
         {hydrated ? "Interactive ✓" : "Loading interactivity…"}
       </p>
 
-      <div className="flex gap-2">
-        <input
-          value={draft}
-          onChange={(e) => handleDraftChange(e.target.value)}
-          placeholder="Ask a question…"
-          className="flex-1 rounded-md border px-3 py-2"
-        />
-        <button onClick={submit} className="rounded-md border px-4 py-2">
-          Ask
-        </button>
+      <div className="space-y-2">
+        <div className="flex gap-2">
+          <input
+            value={draft}
+            onChange={(e) => handleDraftChange(e.target.value)}
+            placeholder="Ask a question…"
+            className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder-white/30 outline-none transition focus:border-indigo-400/60 focus:ring-2 focus:ring-indigo-500/20"
+          />
+          <button
+            onClick={submit}
+            className="rounded-xl bg-indigo-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500"
+          >
+            Ask
+          </button>
+        </div>
+
+        <label className="flex cursor-pointer items-center gap-2 text-sm text-white/40">
+          <input
+            type="checkbox"
+            checked={anonymous}
+            onChange={(e) => setAnonymous(e.target.checked)}
+            className="rounded"
+          />
+          Post anonymously
+        </label>
       </div>
 
       {categorizing && (
-        <p className="text-xs text-gray-400">Suggesting category...</p>
+        <p className="text-xs text-white/30">Suggesting category...</p>
       )}
       {suggestedCategory && !categorizing && (
-        <p className="text-xs text-blue-500">
+        <p className="text-xs text-indigo-400">
           Suggested category: <strong>{suggestedCategory}</strong>
         </p>
       )}
@@ -198,20 +215,35 @@ const data = JSON.parse(text);
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search questions…"
-        className="w-full rounded-md border px-3 py-2"
+        className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder-white/30 outline-none transition focus:border-indigo-400/60 focus:ring-2 focus:ring-indigo-500/20"
       />
 
       <ul className="space-y-3">
         {questions.map((q) => (
-          <li key={q.id} className="rounded-lg border p-3 space-y-2">
+          <li key={q.id} className="rounded-2xl border border-white/8 bg-white/5 p-4 space-y-2 backdrop-blur-sm">
             <div className="flex items-center gap-3">
               <button
                 onClick={() => upvote(q.id)}
-                className="rounded-md border px-3 py-1 font-mono"
+                className="flex items-center gap-1 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-sm font-mono text-white/70 transition hover:border-indigo-400/40 hover:text-indigo-300"
               >
                 ▲ {q.votes}
               </button>
-              <span className="flex-1">{q.body}</span>
+              <span className="flex-1 text-sm text-white/90">{q.body}</span>
+              <button
+                onClick={() => {
+                  const url = `${window.location.origin}?q=${q.id}`;
+                  if (navigator.share) {
+                    navigator.share({ title: q.body, url });
+                  } else {
+                    navigator.clipboard.writeText(url);
+                    alert("Link copied!");
+                  }
+                }}
+                className="text-sm text-white/30 transition hover:text-white/60"
+                title="Share"
+              >
+                🔗
+              </button>
               <button
                 onClick={() => toggleBookmark(q.id)}
                 className="text-lg"
@@ -219,34 +251,23 @@ const data = JSON.parse(text);
               >
                 {bookmarks.has(q.id) ? "🔖" : "🏷️"}
               </button>
-              <button
-  onClick={() => {
-    const url = `${window.location.origin}?q=${q.id}`;
-    if (navigator.share) {
-      navigator.share({ title: q.body, url });
-    } else {
-      navigator.clipboard.writeText(url);
-      alert("Link copied!");
-    }
-  }}
-  className="text-xs text-white/30 hover:text-white/60 transition"
-  title="Share"
->
-  🔗
-</button>
               {reported.has(q.id) ? (
-                <span className="text-xs text-gray-400">Reported ✓</span>
+                <span className="text-xs text-white/30">Reported ✓</span>
               ) : (
                 <button
                   onClick={() =>
                     setReportingId(reportingId === q.id ? null : q.id)
                   }
-                  className="text-xs text-red-400 hover:text-red-600"
+                  className="text-xs text-red-400/60 transition hover:text-red-400"
                 >
                   Report
                 </button>
               )}
             </div>
+
+            {q.anonymous && (
+              <p className="text-xs text-white/30">👤 Anonymous</p>
+            )}
 
             {reportingId === q.id && (
               <div className="flex flex-wrap gap-2 pt-1">
@@ -254,7 +275,7 @@ const data = JSON.parse(text);
                   <button
                     key={reason}
                     onClick={() => submitReport(q.id, reason)}
-                    className="rounded-md border px-3 py-1 text-sm hover:bg-red-50"
+                    className="rounded-lg border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/60 transition hover:border-red-400/40 hover:text-red-400"
                   >
                     {reason}
                   </button>
@@ -269,7 +290,7 @@ const data = JSON.parse(text);
         <button
           onClick={loadMore}
           disabled={loading}
-          className="rounded-md border px-4 py-2 disabled:opacity-50"
+          className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/50 transition hover:bg-white/10 disabled:opacity-50"
         >
           {loading ? "Loading…" : "Load more"}
         </button>
