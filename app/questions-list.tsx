@@ -146,6 +146,7 @@ export default function QuestionsList({
           body: JSON.stringify({ question: value }),
         });
         const data = await res.json();
+        console.log("Category response:", data);
         setSuggestedCategory(data.category);
       } catch {
         setSuggestedCategory(null);
