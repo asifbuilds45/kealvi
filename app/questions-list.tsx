@@ -9,6 +9,7 @@ const supabase = createClient(
 );
 
 const REPORT_REASONS = ["Spam", "Inappropriate", "Misinformation", "Other"];
+const REACTION_EMOJIS = ["👍", "💡", "❤️", "😂"];
 
 type Question = {
   id: string;
@@ -17,6 +18,8 @@ type Question = {
   votes: number;
   anonymous?: boolean;
 };
+
+type ReactionCounts = Record<string, Record<string, number>>;
 
 export default function QuestionsList({
   initialQuestions,
@@ -37,6 +40,8 @@ export default function QuestionsList({
   const [reportingId, setReportingId] = useState<string | null>(null);
   const [suggestedCategory, setSuggestedCategory] = useState<string | null>(null);
   const [categorizing, setCategorizing] = useState(false);
+  const [reactions, setReactions] = useState<ReactionCounts>({});
+  const [userReactions, setUserReactions] = useState<Record<string, Set<string>>>({});
 
   useEffect(() => {
     const saved = localStorage.getItem("question-draft");
@@ -57,6 +62,30 @@ export default function QuestionsList({
       }
     }
     fetchBookmarks();
+  }, []);
+
+  useEffect(() => {
+    async function fetchReactions() {
+      const userId = getVoterId();
+      const { data } = await supabase
+        .from("reactions")
+        .select("question_id, emoji, user_id");
+      if (data) {
+        const counts: ReactionCounts = {};
+        const userR: Record<string, Set<string>> = {};
+        data.forEach((r: any) => {
+          if (!counts[r.question_id]) counts[r.question_id] = {};
+          counts[r.question_id][r.emoji] = (counts[r.question_id][r.emoji] || 0) + 1;
+          if (r.user_id === userId) {
+            if (!userR[r.question_id]) userR[r.question_id] = new Set();
+            userR[r.question_id].add(r.emoji);
+          }
+        });
+        setReactions(counts);
+        setUserReactions(userR);
+      }
+    }
+    fetchReactions();
   }, []);
 
   useEffect(() => {
@@ -125,6 +154,50 @@ export default function QuestionsList({
     }
   }
 
+  async function toggleReaction(questionId: string, emoji: string) {
+    const userId = getVoterId();
+    const hasReacted = userReactions[questionId]?.has(emoji);
+
+    if (hasReacted) {
+      await supabase
+        .from("reactions")
+        .delete()
+        .eq("question_id", questionId)
+        .eq("user_id", userId)
+        .eq("emoji", emoji);
+
+      setReactions((prev) => ({
+        ...prev,
+        [questionId]: {
+          ...prev[questionId],
+          [emoji]: Math.max((prev[questionId]?.[emoji] || 1) - 1, 0),
+        },
+      }));
+      setUserReactions((prev) => {
+        const next = new Set(prev[questionId]);
+        next.delete(emoji);
+        return { ...prev, [questionId]: next };
+      });
+    } else {
+      await supabase
+        .from("reactions")
+        .insert({ question_id: questionId, user_id: userId, emoji });
+
+      setReactions((prev) => ({
+        ...prev,
+        [questionId]: {
+          ...prev[questionId],
+          [emoji]: (prev[questionId]?.[emoji] || 0) + 1,
+        },
+      }));
+      setUserReactions((prev) => {
+        const next = new Set(prev[questionId] || []);
+        next.add(emoji);
+        return { ...prev, [questionId]: next };
+      });
+    }
+  }
+
   async function submitReport(questionId: string, reason: string) {
     const userId = getVoterId();
     const { error } = await supabase
@@ -139,7 +212,6 @@ export default function QuestionsList({
   async function handleDraftChange(value: string) {
     setDraft(value);
     localStorage.setItem("question-draft", value);
-
     if (value.length > 20) {
       setCategorizing(true);
       try {
@@ -190,7 +262,6 @@ export default function QuestionsList({
             Ask
           </button>
         </div>
-
         <label className="flex cursor-pointer items-center gap-2 text-sm text-white/40">
           <input
             type="checkbox"
@@ -220,7 +291,7 @@ export default function QuestionsList({
 
       <ul className="space-y-3">
         {questions.map((q) => (
-          <li key={q.id} className="rounded-2xl border border-white/8 bg-white/5 p-4 space-y-2 backdrop-blur-sm">
+          <li key={q.id} className="rounded-2xl border border-white/8 bg-white/5 p-4 space-y-3 backdrop-blur-sm">
             <div className="flex items-center gap-3">
               <button
                 onClick={() => upvote(q.id)}
@@ -265,12 +336,34 @@ export default function QuestionsList({
               )}
             </div>
 
+            {/* Reactions */}
+            <div className="flex items-center gap-2">
+              {REACTION_EMOJIS.map((emoji) => {
+                const count = reactions[q.id]?.[emoji] || 0;
+                const hasReacted = userReactions[q.id]?.has(emoji);
+                return (
+                  <button
+                    key={emoji}
+                    onClick={() => toggleReaction(q.id, emoji)}
+                    className={`flex items-center gap-1 rounded-lg px-2 py-1 text-sm transition ${
+                      hasReacted
+                        ? "bg-indigo-500/20 text-white border border-indigo-400/40"
+                        : "bg-white/5 text-white/50 border border-white/10 hover:bg-white/10 hover:text-white"
+                    }`}
+                  >
+                    {emoji}
+                    {count > 0 && <span className="text-xs">{count}</span>}
+                  </button>
+                );
+              })}
+            </div>
+
             {q.anonymous && (
               <p className="text-xs text-white/30">👤 Anonymous</p>
             )}
 
             {reportingId === q.id && (
-              <div className="flex flex-wrap gap-2 pt-1">
+              <div className="flex flex-wrap gap-2">
                 {REPORT_REASONS.map((reason) => (
                   <button
                     key={reason}
